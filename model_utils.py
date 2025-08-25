@@ -360,7 +360,8 @@ def pred_and_save_masks_3d_divided(
     # keep track of which subject we're on and when we reach the next subject,
     # save the old array and create the new one. 
 
-    pred_volume_list = []
+    pred_volume_numer = None
+    pred_volume_denom = None
 
     if target_subjects:
         target_subjects = sorted(target_subjects)
@@ -382,14 +383,13 @@ def pred_and_save_masks_3d_divided(
         # If we have moved onto the next subject, we need to save and reinitialize
         if dataset.subject_id_list[list_index] != current_subject:
             # print('Completing subject {}'.format(current_subject))
-            # Take the nan mean along the last axis
-            volume_pred_array = np.concatenate(pred_volume_list, axis=-1)
-            volume_pred_array = np.nanmean(volume_pred_array, axis=-1)
-            # Verify that there are no nans left in the array anymore
-            assert np.isnan(np.min(volume_pred_array)) == False, \
-                '{} still contains nan values when trying to save'.format(
+            # Take the nan mean of the accumulated tiles
+            assert pred_volume_denom is not None
+            assert (pred_volume_denom != 0).all(), \
+                "{} has regions that weren't analyzed; configure `x_y_divisions` or `z_division` in `Dataset3DDivided` for your image size".format(
                     current_subject
                 )
+            volume_pred_array = pred_volume_numer / pred_volume_denom
 
             # Save the array; we'll keep the raw values
             np.save(
@@ -397,9 +397,9 @@ def pred_and_save_masks_3d_divided(
                 volume_pred_array
             )
 
-            del pred_volume_list
+            pred_volume_numer = None
+            pred_volume_denom = None
             del volume_pred_array
-            gc.collect()
 
             # print(current_subject, dataset.subject_id_list[list_index])
 
@@ -435,49 +435,63 @@ def pred_and_save_masks_3d_divided(
 
         # Turn into numpy array and fix dims
         pred = pred.cpu().detach().numpy()
-        pred = np.squeeze(pred)
-        pred = np.expand_dims(pred, axis=-1).astype(np.half)
+        pred = np.squeeze(pred).astype(np.half)
 
         # Make an empty array that will be filled in the correct area with preds
         x_length, y_length, z_length = dataset.image_array_list[list_index].shape
 
         if n_classes == 1:
-            current_pred_array = np.empty(
-                (x_length, y_length, z_length, 1), dtype=np.half
+            current_pred_numer = np.zeros(
+                (x_length, y_length, z_length), dtype=np.half
             )
-            current_pred_array[:] = np.nan
-
-            current_pred_array[
+            current_pred_denom = np.zeros(
+                (x_length, y_length, z_length), dtype=np.half
+            )
+            current_pred_numer[
                 x_index:x_index + dataset.input_dim,
                 y_index:y_index + dataset.input_dim,
                 z_index:z_index + dataset.input_dim
             ] = pred
-        else:
-            current_pred_array = np.empty(
-                (n_classes, x_length, y_length, z_length, 1), dtype=np.half
-            )
-            current_pred_array[:] = np.nan
+            current_pred_denom[
+                x_index:x_index + dataset.input_dim,
+                y_index:y_index + dataset.input_dim,
+                z_index:z_index + dataset.input_dim
+            ] = 1
 
-            current_pred_array[
+        else:
+            current_pred_numer = np.zeros(
+                (n_classes, x_length, y_length, z_length), dtype=np.half
+            )
+            current_pred_denom = np.zeros(
+                (n_classes, x_length, y_length, z_length), dtype=np.half
+            )
+            current_pred_numer[
                 :, 
                 x_index:x_index + dataset.input_dim,
                 y_index:y_index + dataset.input_dim,
                 z_index:z_index + dataset.input_dim
             ] = pred
+            current_pred_denom[
+                :, 
+                x_index:x_index + dataset.input_dim,
+                y_index:y_index + dataset.input_dim,
+                z_index:z_index + dataset.input_dim
+            ] = 1
 
         # print(pred.dtype)
 
-        pred_volume_list.append(current_pred_array)
+        if pred_volume_numer is None:
+            pred_volume_numer = current_pred_numer
+            pred_volume_denom = current_pred_denom
+        else:
+            pred_volume_numer += current_pred_numer
+            pred_volume_denom += current_pred_denom
 
-    # Need to do it once more for the final subject
-    # Take the nan mean along the last axis
-    volume_pred_array = np.concatenate(pred_volume_list, axis=-1)
-    volume_pred_array = np.nanmean(volume_pred_array, axis=-1)
-    # Verify that there are no nans left in the array anymore
-    assert np.isnan(np.min(volume_pred_array)) == False, \
-        '{} still contains nan values when trying to save'.format(
+    assert (pred_volume_denom != 0).all(), \
+        "{} has regions that weren't analyzed; configure `x_y_divisions` or `z_division` in `Dataset3DDivided` for your image size".format(
             current_subject
         )
+    volume_pred_array = pred_volume_numer / pred_volume_denom
 
     # Save the array; we'll keep the raw values
     np.save(
