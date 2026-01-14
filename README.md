@@ -1,3 +1,5 @@
+**Note:** This was originally [mazurowski-lab/3D-Breast-FGT-and-Blood-Vessel-Segmentation](https://github.com/mazurowski-lab/3D-Breast-FGT-and-Blood-Vessel-Segmentation). It's included here because it is a dependency for [dsi-clinic/vanguard](https://github.com/dsi-clinic/vanguard).
+
 # Segmentation of breast and fibroglandular tissue in MRI: a publicly available dataset and deep learning model
 
 This repository contains the source code and trained models for the research study titled "Segmentation of breast and fibroglandular tissue in MRI: a publicly available dataset and deep learning model". 
