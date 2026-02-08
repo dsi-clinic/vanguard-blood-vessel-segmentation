@@ -11,6 +11,8 @@ import numpy as np
 
 from losses import DiceLoss, dice_coeff
 
+# Changed num_workers to 1 for now.
+
 
 def train_model(
     model,
@@ -24,7 +26,7 @@ def train_model(
     model_save_dir,
     model_save_name,
     loss = 'cross',
-    num_workers = 8,
+    num_workers = 1,
     load_model_path = None
 ):
     """

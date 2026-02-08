@@ -1,4 +1,5 @@
 import argparse
+import torchio as tio
 
 # Performs predictions using a trained model.
 # Predictions are performed the same method we used and are saved to a

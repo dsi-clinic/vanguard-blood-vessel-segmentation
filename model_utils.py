@@ -14,13 +14,15 @@ import torchio as tio
 
 import gc
 
+#Changed all num_workers to 1 for now.
+
 def pred_and_save_masks_2d(
     model,
     saved_model_path,
     dataset,
     save_masks_dir,
     n_classes,
-    num_workers = 8,
+    num_workers = 1,
     use_parallel = True
 ):
 
@@ -112,7 +114,7 @@ def eval_2d_breast_model(
     breast_saved_model_path,
     breast_dataset,
     batch_size, 
-    num_workers = 8,
+    num_workers = 1,
     use_parallel = True
 ):
 
@@ -191,7 +193,7 @@ def eval_2d_dv_model(
     dv_saved_model_path,
     dv_dataset,
     batch_size, 
-    num_workers = 8,
+    num_workers = 1,
     use_parallel = True
 ):
     """
@@ -300,7 +302,7 @@ def pred_and_save_masks_3d_divided(
     dataset,
     n_classes,
     save_masks_dir,
-    num_workers = 8,
+    num_workers = 1,
     target_subjects = None
 ):
 
@@ -507,7 +509,7 @@ def pred_and_save_masks_3d_stacked(
     n_classes,
     n_channels,
     save_masks_dir,
-    num_workers = 8,
+    num_workers = 1,
     target_subjects = None
 ):
 
@@ -703,7 +705,7 @@ def pred_and_save_masks_3d_simple(
     n_classes,
     n_channels,
     save_masks_dir,
-    num_workers = 8
+    num_workers = 1
 ):
 
     """
