@@ -14,7 +14,53 @@ import torchio as tio
 
 import gc
 
+
+def _slice_bounds(index, width, limit):
+    """Return clipped [start, stop) bounds matching NumPy slicing."""
+    start, stop, _ = slice(index, index + width).indices(limit)
+    return start, stop
+
+
+def _center_align_prediction(pred, target_shape):
+    """Center-crop/pad spatial dims so prediction matches target exactly."""
+    pred = np.asarray(pred)
+    spatial_dims = len(target_shape)
+    non_spatial_dims = pred.ndim - spatial_dims
+
+    slices = [slice(None)] * non_spatial_dims
+    pad_width = [(0, 0)] * non_spatial_dims
+
+    for axis, target_size in enumerate(target_shape):
+        current_size = pred.shape[non_spatial_dims + axis]
+        delta = current_size - target_size
+        if delta >= 0:
+            start = delta // 2
+            end = start + target_size
+            slices.append(slice(start, end))
+            pad_width.append((0, 0))
+        else:
+            slices.append(slice(None))
+            deficit = -delta
+            before = deficit // 2
+            after = deficit - before
+            pad_width.append((before, after))
+
+    aligned = pred[tuple(slices)]
+    if any(before or after for before, after in pad_width[non_spatial_dims:]):
+        aligned = np.pad(aligned, pad_width, mode='constant')
+    return aligned
+
+
 #Changed all num_workers to 1 for now.
+
+def _save_vessel_probability(save_path: Path, volume_pred_array: np.ndarray) -> None:
+    """Save vessel probabilities as a compressed NPZ file."""
+    if volume_pred_array.ndim == 4 and volume_pred_array.shape[0] > 1:
+        vessel_prob = volume_pred_array[1]
+    else:
+        vessel_prob = volume_pred_array
+
+    np.savez_compressed(save_path, vessel=vessel_prob)
 
 def pred_and_save_masks_2d(
     model,
@@ -393,10 +439,10 @@ def pred_and_save_masks_3d_divided(
                 )
             volume_pred_array = pred_volume_numer / pred_volume_denom
 
-            # Save the array; we'll keep the raw values
-            np.save(
-                save_masks_dir / '{}.npy'.format(current_subject), 
-                volume_pred_array
+            # Save vessel probabilities only to reduce storage.
+            _save_vessel_probability(
+                save_masks_dir / '{}.npz'.format(current_subject),
+                volume_pred_array,
             )
 
             pred_volume_numer = None
@@ -442,6 +488,15 @@ def pred_and_save_masks_3d_divided(
         # Make an empty array that will be filled in the correct area with preds
         x_length, y_length, z_length = dataset.image_array_list[list_index].shape
 
+        x_start, x_stop = _slice_bounds(x_index, dataset.input_dim, x_length)
+        y_start, y_stop = _slice_bounds(y_index, dataset.input_dim, y_length)
+        z_start, z_stop = _slice_bounds(z_index, dataset.input_dim, z_length)
+        target_shape = (
+            x_stop - x_start,
+            y_stop - y_start,
+            z_stop - z_start
+        )
+
         if n_classes == 1:
             current_pred_numer = np.zeros(
                 (x_length, y_length, z_length), dtype=np.half
@@ -449,15 +504,16 @@ def pred_and_save_masks_3d_divided(
             current_pred_denom = np.zeros(
                 (x_length, y_length, z_length), dtype=np.half
             )
+            pred = _center_align_prediction(pred, target_shape).astype(np.half, copy=False)
             current_pred_numer[
-                x_index:x_index + dataset.input_dim,
-                y_index:y_index + dataset.input_dim,
-                z_index:z_index + dataset.input_dim
+                x_start:x_stop,
+                y_start:y_stop,
+                z_start:z_stop
             ] = pred
             current_pred_denom[
-                x_index:x_index + dataset.input_dim,
-                y_index:y_index + dataset.input_dim,
-                z_index:z_index + dataset.input_dim
+                x_start:x_stop,
+                y_start:y_stop,
+                z_start:z_stop
             ] = 1
 
         else:
@@ -467,17 +523,18 @@ def pred_and_save_masks_3d_divided(
             current_pred_denom = np.zeros(
                 (n_classes, x_length, y_length, z_length), dtype=np.half
             )
+            pred = _center_align_prediction(pred, target_shape).astype(np.half, copy=False)
             current_pred_numer[
                 :, 
-                x_index:x_index + dataset.input_dim,
-                y_index:y_index + dataset.input_dim,
-                z_index:z_index + dataset.input_dim
+                x_start:x_stop,
+                y_start:y_stop,
+                z_start:z_stop
             ] = pred
             current_pred_denom[
                 :, 
-                x_index:x_index + dataset.input_dim,
-                y_index:y_index + dataset.input_dim,
-                z_index:z_index + dataset.input_dim
+                x_start:x_stop,
+                y_start:y_stop,
+                z_start:z_stop
             ] = 1
 
         # print(pred.dtype)
@@ -495,10 +552,10 @@ def pred_and_save_masks_3d_divided(
         )
     volume_pred_array = pred_volume_numer / pred_volume_denom
 
-    # Save the array; we'll keep the raw values
-    np.save(
-        save_masks_dir / '{}.npy'.format(current_subject), 
-        volume_pred_array
+    # Save vessel probabilities only to reduce storage.
+    _save_vessel_probability(
+        save_masks_dir / '{}.npz'.format(current_subject),
+        volume_pred_array,
     )
     
 
