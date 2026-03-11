@@ -1,10 +1,15 @@
+"""Performs predictions using a trained model.
+
+NOTE: The odd-dimension skip-connection fix is applied via monkey-patch when
+this module is run as the CLI entrypoint (python predict.py ...). Inference
+paths that import and use the UNet/DecodingBlock directly without running
+this script will NOT have the fix. Use this script with its documented CLI
+options for vessel segmentation inference.
+"""
 import argparse
 import torch.nn.functional as F
 import torchio as tio
 
-# Performs predictions using a trained model.
-# Predictions are performed the same method we used and are saved to a
-# target directory. 
 
 def get_args():
     parser = argparse.ArgumentParser(
@@ -59,8 +64,14 @@ def _align_skip_connection_spatial(skip_connection, x):
             pad_after = deficit - pad_before
             pad_pairs.append((pad_before, pad_after))
 
+    out = skip_connection[tuple(slices)]
+    if any(p != (0, 0) for p in pad_pairs):
+        pad_flat = tuple(p for pair in reversed(pad_pairs) for p in pair)
+        out = F.pad(out, pad_flat, mode="constant", value=0)
+    return out
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     from dataset_3d import *
     from model_utils import pred_and_save_masks_3d_simple, pred_and_save_masks_3d_divided
     from unet import UNet3D
