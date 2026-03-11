@@ -1,8 +1,15 @@
-import argparse
+"""Performs predictions using a trained model.
 
-# Performs predictions using a trained model.
-# Predictions are performed the same method we used and are saved to a
-# target directory. 
+NOTE: The odd-dimension skip-connection fix is applied via monkey-patch when
+this module is run as the CLI entrypoint (python predict.py ...). Inference
+paths that import and use the UNet/DecodingBlock directly without running
+this script will NOT have the fix. Use this script with its documented CLI
+options for vessel segmentation inference.
+"""
+import argparse
+import torch.nn.functional as F
+import torchio as tio
+
 
 def get_args():
     parser = argparse.ArgumentParser(
@@ -35,10 +42,47 @@ def get_args():
     return parser.parse_args()
 
 
-if __name__ == '__main__':
+def _align_skip_connection_spatial(skip_connection, x):
+    """Center-crop/pad skip tensor so spatial dims match x exactly."""
+    spatial_skip = skip_connection.shape[2:]
+    spatial_x = x.shape[2:]
+
+    slices = [slice(None), slice(None)]
+    pad_pairs = []
+
+    for current, target in zip(spatial_skip, spatial_x):
+        delta = current - target
+        if delta >= 0:
+            start = delta // 2
+            end = start + target
+            slices.append(slice(start, end))
+            pad_pairs.append((0, 0))
+        else:
+            slices.append(slice(None))
+            deficit = -delta
+            pad_before = deficit // 2
+            pad_after = deficit - pad_before
+            pad_pairs.append((pad_before, pad_after))
+
+    out = skip_connection[tuple(slices)]
+    if any(p != (0, 0) for p in pad_pairs):
+        pad_flat = tuple(p for pair in reversed(pad_pairs) for p in pair)
+        out = F.pad(out, pad_flat, mode="constant", value=0)
+    return out
+
+
+if __name__ == "__main__":
     from dataset_3d import *
     from model_utils import pred_and_save_masks_3d_simple, pred_and_save_masks_3d_divided
     from unet import UNet3D
+    from unet.decoding import DecodingBlock
+
+    if not getattr(DecodingBlock, "_vanguard_shape_patch", False):
+        def _patched_center_crop(self, skip_connection, x):
+            return _align_skip_connection_spatial(skip_connection, x)
+
+        DecodingBlock.center_crop = _patched_center_crop
+        DecodingBlock._vanguard_shape_patch = True
 
     args = get_args()
 

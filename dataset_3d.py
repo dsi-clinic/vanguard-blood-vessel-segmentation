@@ -127,14 +127,14 @@ class _Dataset3DBase(Dataset):
     def get_image_mask_using_indicies(
         self, list_index, x_index, y_index, z_index
     ):
-
         image_array = np.expand_dims(
-            self.image_array_list[list_index][
-                x_index:x_index + self.input_dim,
-                y_index:y_index + self.input_dim,
-                z_index:z_index + self.input_dim
-            ], 
-            axis=0
+            self._extract_cube_with_padding(
+                self.image_array_list[list_index],
+                x_index,
+                y_index,
+                z_index,
+            ),
+            axis=0,
         )
         image_array = torch.from_numpy(image_array)
 
@@ -143,12 +143,13 @@ class _Dataset3DBase(Dataset):
             
         elif self.image_only and hasattr(self, 'additional_input_list'):
             additional_input_array = np.expand_dims(
-                self.additional_input_list[list_index][
-                    x_index:x_index + self.input_dim,
-                    y_index:y_index + self.input_dim,
-                    z_index:z_index + self.input_dim
-                ], 
-                axis=0
+                self._extract_cube_with_padding(
+                    self.additional_input_list[list_index],
+                    x_index,
+                    y_index,
+                    z_index,
+                ),
+                axis=0,
             )
             additional_input_array = torch.from_numpy(additional_input_array)
             image_array = torch.cat((image_array, additional_input_array))
@@ -156,23 +157,25 @@ class _Dataset3DBase(Dataset):
             return image_array
 
         mask_array = np.expand_dims(
-            self.mask_array_list[list_index][
-                x_index:x_index + self.input_dim,
-                y_index:y_index + self.input_dim,
-                z_index:z_index + self.input_dim
-            ], 
-            axis=0
+            self._extract_cube_with_padding(
+                self.mask_array_list[list_index],
+                x_index,
+                y_index,
+                z_index,
+            ),
+            axis=0,
         )
         mask_array = torch.from_numpy(mask_array.copy())
 
         if hasattr(self, 'additional_input_list'):
             additional_input_array = np.expand_dims(
-                self.additional_input_list[list_index][
-                    x_index:x_index + self.input_dim,
-                    y_index:y_index + self.input_dim,
-                    z_index:z_index + self.input_dim
-                ], 
-                axis=0
+                self._extract_cube_with_padding(
+                    self.additional_input_list[list_index],
+                    x_index,
+                    y_index,
+                    z_index,
+                ),
+                axis=0,
             )
             additional_input_array = torch.from_numpy(additional_input_array)
             image_array = torch.cat((image_array, additional_input_array))
@@ -181,6 +184,33 @@ class _Dataset3DBase(Dataset):
             mask_array = convert_to_one_hot(mask_array)
 
         return image_array, mask_array
+
+    def _extract_cube_with_padding(self, volume, x_index, y_index, z_index):
+        """Return a fixed-size cube, zero-padding when requested bounds exceed volume."""
+        dim = self.input_dim
+        x_len, y_len, z_len = volume.shape
+
+        out = np.zeros((dim, dim, dim), dtype=volume.dtype)
+        starts = (x_index, y_index, z_index)
+        lengths = (x_len, y_len, z_len)
+
+        src_slices = []
+        dst_slices = []
+        for start, length in zip(starts, lengths):
+            stop = start + dim
+            src_start = max(start, 0)
+            src_stop = min(stop, length)
+
+            if src_stop <= src_start:
+                return out
+
+            dst_start = src_start - start
+            dst_stop = dst_start + (src_stop - src_start)
+            src_slices.append(slice(src_start, src_stop))
+            dst_slices.append(slice(dst_start, dst_stop))
+
+        out[tuple(dst_slices)] = volume[tuple(src_slices)]
+        return out
 
 def transform_using_torchio(
     image,

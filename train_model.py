@@ -117,6 +117,8 @@ if __name__ == '__main__':
             transforms = val_transforms
         )
 
+# Changed num_workers to 1 for now.
+
         trained_unet = train_model(
             model = unet,
             train_dataset = train_dataset,
@@ -128,7 +130,7 @@ if __name__ == '__main__':
             epochs = args.epochs,
             model_save_dir = args.model_save_dir,
             model_save_name = args.model_save_name,
-            num_workers = 8,
+            num_workers = 1,
             loss='cross',
         )
 
@@ -161,6 +163,8 @@ if __name__ == '__main__':
             one_hot_mask = True
         )
 
+# Changed num_workers to 1 for now
+
         trained_unet = train_model(
             model = unet,
             train_dataset = train_dataset,
@@ -172,6 +176,6 @@ if __name__ == '__main__':
             epochs = args.epochs,
             model_save_dir = args.model_save_dir,
             model_save_name = args.model_save_name,
-            num_workers = 8,
+            num_workers = 1,
             loss='dice',
         )
